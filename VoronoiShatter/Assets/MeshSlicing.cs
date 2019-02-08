@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using System.Linq;
 
-public class PlaneSlicing : MonoBehaviour
+public class MeshSlicing : MonoBehaviour
 {
     public float radius = 0.025f;
     private Mesh mesh;
@@ -16,19 +16,17 @@ public class PlaneSlicing : MonoBehaviour
     private Vector3 vwp;
     public Vector3 center;
     private MeshCollider mesh_col;
-    private List<Vector3> new_verts = new List<Vector3>();
-    private List<Vector2> new_uvs = new List<Vector2>();
-    private List<Vector3> new_normals = new List<Vector3>();
     private Color point_color;
+    private GameObject copy;
     // Start is called before the first frame update
     void Start()
     {
         cam_pos = GameObject.Find("Main Camera");
         mesh = GetComponent<MeshFilter>().mesh;
         mesh_col = GetComponent<MeshCollider>();
-        //Debug.Log(mesh.vertices.Length);
-        Debug.Log(mesh.triangles.Length);
+       // Debug.Log(mesh.vertices.Length);
         point_color = Color.green;
+        copy = gameObject;
     }
 
     // Update is called once per frame
@@ -71,9 +69,6 @@ public class PlaneSlicing : MonoBehaviour
     void Slice(Vector3 start)
     {
         points.Clear();
-        new_verts.Clear();
-        new_uvs.Clear();
-        new_normals.Clear();
         start_point = start;
 
         min_dist = Vector3.positiveInfinity;
@@ -135,23 +130,48 @@ public class PlaneSlicing : MonoBehaviour
             }
         }
 
-        List<Vector3> mesh_list_0 = new List<Vector3>();
-        List<Vector3> mesh_list_1 = new List<Vector3>();
+        List<Vector3> left_verts = new List<Vector3>();
+        List<Vector2> left_uvs = new List<Vector2>();
+        List<Vector3> left_normals = new List<Vector3>();
+
+        List<Vector3> right_verts = new List<Vector3>();
+        List<Vector2> right_uvs = new List<Vector2>();
+        List<Vector3> right_normals = new List<Vector3>();
 
         for (int i = 0; i < mesh.vertexCount; i++)
         {
             Vector3 v = transform.TransformPoint(mesh.vertices[i]);
             if (v.x < start_point.x)
             {
-                mesh_list_0.Add(mesh.vertices[i]);
-                new_verts.Add(mesh.vertices[i]);
-                new_uvs.Add(mesh.uv[i]);
-                new_normals.Add(mesh.normals[i]);
+                left_verts.Add(mesh.vertices[i]);
+                left_uvs.Add(mesh.uv[i]);
+                left_normals.Add(mesh.normals[i]);
+            }
+            else
+            {
+                right_verts.Add(mesh.vertices[i]);
+                right_uvs.Add(mesh.uv[i]);
+                right_normals.Add(mesh.normals[i]);
             }
         }
-        //Debug.Log(new_verts.Count);
-        RebuildMesh();
-       
+        GameObject new_obj = Instantiate(copy);
+
+        Mesh old_mesh = new Mesh();
+        old_mesh.vertices = mesh.vertices;
+        old_mesh.uv = mesh.uv;
+        old_mesh.normals = mesh.normals;
+        old_mesh.triangles = mesh.triangles;
+
+
+        RebuildMesh(mesh, old_mesh, left_verts, left_uvs, left_normals);
+        mesh_col.sharedMesh = mesh;
+
+        new_obj.name = gameObject.name + "_right";
+        Mesh right_mesh = new_obj.GetComponent<MeshFilter>().mesh;
+        RebuildMesh(right_mesh, old_mesh, right_verts, right_uvs, right_normals);
+        new_obj.GetComponent<MeshFilter>().mesh = right_mesh;
+        new_obj.GetComponent<MeshCollider>().sharedMesh = right_mesh;
+        gameObject.name = gameObject.name + "_left";
 
 
     }
@@ -236,72 +256,96 @@ public class PlaneSlicing : MonoBehaviour
         return false;
     }
 
-    void RebuildMesh()
+    void RebuildMesh(Mesh current_mesh, Mesh old_mesh, List<Vector3> new_verts, List<Vector2> new_uvs, List<Vector3> new_normals)
     {
-        int[] tris = mesh.triangles;
-        Vector3[] verts = mesh.vertices;
-        Vector2[] uvs = mesh.uv;
-        Vector3[] normals = mesh.normals;
+        Mesh new_mesh = new Mesh();
+        new_mesh.vertices = old_mesh.vertices;
+        new_mesh.uv = old_mesh.uv;
+        new_mesh.normals = old_mesh.normals;
+        new_mesh.triangles = old_mesh.triangles;
 
-        List<Vector3> rebuilt_verts = new List<Vector3>();
-        List<Vector2> rebuilt_uvs = new List<Vector2>();
-        List<Vector3> rebuilt_normals = new List<Vector3>();
+        Vector3[] verts = new_mesh.vertices;
+        Vector2[] uvs = new_mesh.uv;
+        Vector3[] normals = new_mesh.normals;
+        int[] tris = new_mesh.triangles;
+
         List<int> rebuilt_tris = new List<int>();
-
-        Debug.Log(tris.Length);
         //add triangles from existing verts
         for (int i = 0; i < tris.Length; i += 3)
         {
-            Vector3 vert0 = verts[tris[i + 0]];
-            Vector3 vert1 = verts[tris[i + 1]];
-            Vector3 vert2 = verts[tris[i + 2]];
-            Vector2 uv0 = uvs[tris[i + 0]];
-            Vector2 uv1 = uvs[tris[i + 1]];
-            Vector2 uv2 = uvs[tris[i + 2]];
-            Vector3 normal0 = normals[tris[i + 0]];
-            Vector3 normal1 = normals[tris[i + 1]];
-            Vector3 normal2 = normals[tris[i + 2]];
+            List<Vector3> mesh_verts = new List<Vector3>();
+            List<Vector2> mesh_uvs = new List<Vector2>();
+            List<Vector3> mesh_normals = new List<Vector3>();
+
+            mesh_verts.Add(verts[tris[i + 0]]);
+            mesh_verts.Add(verts[tris[i + 1]]);
+            mesh_verts.Add(verts[tris[i + 2]]);
+            mesh_uvs.Add(uvs[tris[i + 0]]);
+            mesh_uvs.Add(uvs[tris[i + 1]]);
+            mesh_uvs.Add(uvs[tris[i + 2]]);
+            mesh_normals.Add(normals[tris[i + 0]]);
+            mesh_normals.Add(normals[tris[i + 1]]);
+            mesh_normals.Add(normals[tris[i + 2]]);
+
             int[] tri_indexes = { -1, -1, -1 };
+            int invalid_count = 3;
 
             for (int j = 0; j < new_verts.Count; j++)
             {
-                if (vert0 == new_verts[j] && uv0 == new_uvs[j] && normal0 == new_normals[j])
+                for (int z = 0; z < 3; z++)
                 {
-                    //first vert is valid
-                    tri_indexes[0] = j;
-                }
-                if(vert1 == new_verts[j] && uv1 == new_uvs[j] && normal1 == new_normals[j])
-                {
-                    //second vert is valid
-                    tri_indexes[1] = j;
-                }
-                if(vert2 == new_verts[j] && uv2 == new_uvs[j] && normal2 == new_normals[j])
-                {
-                    //third vert is valid
-                    tri_indexes[2] = j;
+                    if (mesh_verts[z] == new_verts[j] && mesh_uvs[z] == new_uvs[j] && mesh_normals[z] == new_normals[j])
+                    {
+                        //first vert is valid
+                        tri_indexes[z] = j;
+                        Debug.Log(j);
+                        invalid_count--;
+                    }
                 }
             }
-            if(tri_indexes[0] != -1 && tri_indexes[1] != -1 && tri_indexes[2] != -1)
+            if (tri_indexes[0] != -1 && tri_indexes[1] != -1 && tri_indexes[2] != -1)
             {
                 //if all 3 verts are valid, add triangle
-                for(int z = 0; z < 3; z++)
+                for (int z = 0; z < 3; z++)
                 {
                     rebuilt_tris.Add(tri_indexes[z]);
                 }
             }
+            else if (invalid_count > 0)
+            {
+                Vector3 closest_point = Vector3.positiveInfinity;
+                for (int z = 0; z < 3; z++)
+                {
+                    if (tri_indexes[z] == -1)
+                    {
+                        //mesh_verts[z] compare and set then add to new verts
+                        for (int p = 0; p < points.Count; p++)
+                        {
+                            Vector3 vlp = transform.InverseTransformPoint(points[p]);
+                            if (Vector3.Distance(mesh_verts[z], vlp) < Vector3.Distance(mesh_verts[z], closest_point))
+                            {
+                                closest_point = vlp;
+                            }
+                        }
+
+                        new_verts.Add(closest_point);
+                        new_uvs.Add(mesh_uvs[z]);
+                        new_normals.Add(mesh_normals[z]);
+                        tri_indexes[z] = new_verts.Count - 1;
+                        rebuilt_tris.Add(tri_indexes[z]);
+                    }
+                    else
+                    {
+                        rebuilt_tris.Add(tri_indexes[z]);
+                    }
+                }
+            }
         }
-
-        
-
-      //  Debug.Log(rebuilt_tris.Count);
-        mesh.Clear();
-        mesh.vertices = new_verts.ToArray();
-        mesh.uv = new_uvs.ToArray();
-        mesh.normals = new_normals.ToArray();
-        mesh.triangles = rebuilt_tris.ToArray();
-        mesh.RecalculateNormals();
-        //Debug.Log(mesh.vertices.Length);
-        //Debug.Log(mesh.triangles.Length);
-        mesh_col.sharedMesh = mesh;
+        current_mesh.Clear();
+        current_mesh.vertices = new_verts.ToArray();
+        current_mesh.uv = new_uvs.ToArray();
+        current_mesh.normals = new_normals.ToArray();
+        current_mesh.triangles = rebuilt_tris.ToArray();
+        current_mesh.RecalculateNormals();
     }
 }
