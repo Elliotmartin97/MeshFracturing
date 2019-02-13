@@ -216,8 +216,9 @@ public class MeshSlicing : MonoBehaviour
             new_point = Vector3.MoveTowards(new_point, valid, 0.01f);
             count++;
             relative_point = slice_transform.InverseTransformPoint(new_point);
-            if(count > 1000)
+            if(count > 500)
             {
+                Debug.Log("BROKE THE WHILE LOOP");
                 break;
             }
         }
@@ -287,12 +288,12 @@ public class MeshSlicing : MonoBehaviour
                     
                     if (tri_indexes[z] == -1)
                     {
-                        
+
                         //mesh_verts[z] compare and set then add to new verts
                         for (int p = 0; p < points.Count; p++)
                         {
                             Vector3 vlp = transform.InverseTransformPoint(points[p]);
-                            if (Vector3.Distance(mesh.vertices[z], vlp) < Vector3.Distance(mesh.vertices[z], closest_point))
+                            if (Vector3.Distance(mesh_verts[z], vlp) < Vector3.Distance(mesh_verts[z], closest_point))
                             {
                                 closest_point = vlp;
                             }
