@@ -3,6 +3,11 @@ using System.Collections.Generic;
 using UnityEngine;
 using System.Linq;
 
+
+// TO DO
+//Mesh Index is fucked when generating points, cylinders especially
+//Rebuilding triangles currently gets nearest point from invalid vert, ends up in middle, maybe rebuild triangles when generating points as the old points are simply moved to slice pos 
+
 public class MeshSlicing : MonoBehaviour
 {
     public float radius = 0.025f;
@@ -21,6 +26,7 @@ public class MeshSlicing : MonoBehaviour
     public float slice_angle = 0.0f;
     private Ray ray;
     private Transform slice_transform;
+
     // Start is called before the first frame update
     void Start()
     {
@@ -42,10 +48,11 @@ public class MeshSlicing : MonoBehaviour
         {
             if(hit.collider.gameObject == this.gameObject)
             {
-                if(Input.GetMouseButtonDown(0))
+                if (Input.GetMouseButtonDown(0))
                 {
                     Slice(hit.point);
                 }
+                // Slice(hit.point);
             }
         }
 
@@ -99,58 +106,122 @@ public class MeshSlicing : MonoBehaviour
         List<Vector3> right_normals = new List<Vector3>();
 
         GenerateSlicePoints(slice_transform);
-        //for (int i = 0; i < mesh.vertexCount; i++)
-        //{
-        //    Vector3 v = transform.TransformPoint(mesh.vertices[i]);
-        //    Vector3 relative_point = slice_transform.InverseTransformPoint(v);
-        //    if (relative_point.x < 0.0f)
-        //    {
-        //        left_verts.Add(mesh.vertices[i]);
-        //        left_uvs.Add(mesh.uv[i]);
-        //        left_normals.Add(mesh.normals[i]);
-        //    }
-        //    else
-        //    {
-        //        right_verts.Add(mesh.vertices[i]);
-        //        right_uvs.Add(mesh.uv[i]);
-        //        right_normals.Add(mesh.normals[i]);
-        //    }
-        //}
-        //GameObject new_obj = Instantiate(copy);
 
-        //Mesh old_mesh = new Mesh();
-        //old_mesh.vertices = mesh.vertices;
-        //old_mesh.uv = mesh.uv;
-        //old_mesh.normals = mesh.normals;
-        //old_mesh.triangles = mesh.triangles;
+        for (int i = 0; i < mesh.vertexCount; i++)
+        {
+            Vector3 v = transform.TransformPoint(mesh.vertices[i]);
+            Vector3 relative_point = slice_transform.InverseTransformPoint(v);
+            if (relative_point.x < 0.0f)
+            {
+                Debug.Log("relative");
+                left_verts.Add(mesh.vertices[i]);
+                left_uvs.Add(mesh.uv[i]);
+                left_normals.Add(mesh.normals[i]);
+            }
+            else
+            {
+                Debug.Log("nope");
+                right_verts.Add(mesh.vertices[i]);
+                right_uvs.Add(mesh.uv[i]);
+                right_normals.Add(mesh.normals[i]);
+            }
+        }
+        GameObject new_obj = Instantiate(copy);
 
-
-        //RebuildMesh(mesh, old_mesh, left_verts, left_uvs, left_normals);
-        //mesh_col.sharedMesh = mesh;
-
-        //new_obj.name = gameObject.name + "_right";
-        //Mesh right_mesh = new_obj.GetComponent<MeshFilter>().mesh;
-        //RebuildMesh(right_mesh, old_mesh, right_verts, right_uvs, right_normals);
-        //new_obj.GetComponent<MeshFilter>().mesh = right_mesh;
-        //new_obj.GetComponent<MeshCollider>().sharedMesh = right_mesh;
-        //gameObject.name = gameObject.name + "_left";
+        Mesh old_mesh = new Mesh();
+        old_mesh.vertices = mesh.vertices;
+        old_mesh.uv = mesh.uv;
+        old_mesh.normals = mesh.normals;
+        old_mesh.triangles = mesh.triangles;
 
 
+        RebuildMesh(mesh, old_mesh, left_verts, left_uvs, left_normals);
+        mesh_col.sharedMesh = mesh;
+
+        new_obj.name = gameObject.name + "_right";
+        Mesh right_mesh = new_obj.GetComponent<MeshFilter>().mesh;
+        RebuildMesh(right_mesh, old_mesh, right_verts, right_uvs, right_normals);
+        new_obj.GetComponent<MeshFilter>().mesh = right_mesh;
+        new_obj.GetComponent<MeshCollider>().sharedMesh = right_mesh;
+        gameObject.name = gameObject.name + "_left";
+
+        Destroy(slice_viewer);
     }
 
     void GenerateSlicePoints(Transform slice_dir)
     {
-        for(int i = 0; i < mesh.vertexCount; i++)
-        {
-            Vector3 v = transform.TransformPoint(mesh.vertices[i]);
-            Vector3 relative_point = slice_transform.InverseTransformPoint(v);
-            relative_point.x = 0.0f;
+        int[] tris = mesh.triangles;
 
-            Vector3 point = slice_transform.TransformPoint(relative_point);
+        for (int i = 0; i < tris.Length; i += 3)
+        {
             
-            points.Add(point);
-            
+            if (!IsRelative(tris[i]))
+            {
+                Vector3 n = FindNearestRelative(tris[i], 0);
+                Vector3 v = transform.TransformPoint(mesh.vertices[tris[i]]);
+                MoveTowardRelative(v, n);
+            }
+            if(!IsRelative(tris[i+1]))
+            {
+                Vector3 n = FindNearestRelative(tris[i], 1);
+                Vector3 v = transform.TransformPoint(mesh.vertices[tris[i+1]]);
+                MoveTowardRelative(v, n);
+            }
+            if(!IsRelative(tris[i+2]))
+            {
+                Vector3 n = FindNearestRelative(tris[i], 2);
+                Vector3 v = transform.TransformPoint(mesh.vertices[tris[i+2]]);
+                MoveTowardRelative(v, n);
+            }
         }
+    }
+
+    bool IsRelative(int vert_index)
+    {
+        Vector3 vert = mesh.vertices[vert_index];
+        Vector3 v = transform.TransformPoint(vert);
+        Vector3 relative_point = slice_transform.InverseTransformPoint(v);
+        if (relative_point.x < 0.0f)
+        {
+            return true;
+        }
+        return false;
+    }
+
+    Vector3 FindNearestRelative(int tri_index, int vert_index)
+    {
+        Vector3 nearest = Vector3.positiveInfinity;
+        Vector3 current = transform.TransformPoint(mesh.vertices[tri_index + vert_index]);
+        for (int i = 0; i < 3; i++)
+        {
+            Vector3 v = transform.TransformPoint(mesh.vertices[tri_index + i]);
+            if(i != vert_index && IsRelative(tri_index + i))
+            {
+                if(Vector3.Distance(current, v) < Vector3.Distance(current, nearest))
+                {
+                    nearest = v;
+                }
+            }
+        }
+        return nearest;
+    }
+
+    void MoveTowardRelative(Vector3 invalid, Vector3 valid)
+    {
+        Vector3 new_point = invalid;
+        Vector3 relative_point = slice_transform.InverseTransformPoint(new_point);
+        int count = 0;
+        while(relative_point.x > 0.0f)
+        {
+            new_point = Vector3.MoveTowards(new_point, valid, 0.01f);
+            count++;
+            relative_point = slice_transform.InverseTransformPoint(new_point);
+            if(count > 1000)
+            {
+                break;
+            }
+        }
+        points.Add(new_point);
     }
 
     void RebuildMesh(Mesh current_mesh, Mesh old_mesh, List<Vector3> new_verts, List<Vector2> new_uvs, List<Vector3> new_normals)
@@ -213,15 +284,15 @@ public class MeshSlicing : MonoBehaviour
                 Vector3 closest_point = Vector3.positiveInfinity;
                 for (int z = 0; z < 3; z++)
                 {
+                    
                     if (tri_indexes[z] == -1)
                     {
-                        Vector3 valid_point;
                         
                         //mesh_verts[z] compare and set then add to new verts
                         for (int p = 0; p < points.Count; p++)
                         {
                             Vector3 vlp = transform.InverseTransformPoint(points[p]);
-                            if (Vector3.Distance(mesh_verts[z], vlp) < Vector3.Distance(mesh_verts[z], closest_point))
+                            if (Vector3.Distance(mesh.vertices[z], vlp) < Vector3.Distance(mesh.vertices[z], closest_point))
                             {
                                 closest_point = vlp;
                             }
@@ -246,5 +317,7 @@ public class MeshSlicing : MonoBehaviour
         current_mesh.normals = new_normals.ToArray();
         current_mesh.triangles = rebuilt_tris.ToArray();
         current_mesh.RecalculateNormals();
+        current_mesh.RecalculateBounds();
+        current_mesh.RecalculateTangents();
     }
 }
