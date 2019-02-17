@@ -103,6 +103,8 @@ public class MeshSlicing : MonoBehaviour
         left_points.Clear();
         start_point = start;
 
+        //I thought this AT would be easy. I was wrong.
+
         GameObject slice_viewer = new GameObject();
         slice_transform = slice_viewer.transform;
         slice_transform.position = start;
@@ -118,12 +120,13 @@ public class MeshSlicing : MonoBehaviour
         List<Vector2> right_uvs = new List<Vector2>();
         List<Vector3> right_normals = new List<Vector3>();
 
-        //GenerateSlicePoints(slice_transform);
+        GenerateSlicePoints(slice_transform); //<- redo this it's trash and doesn't work
 
         for (int i = 0; i < mesh.vertexCount; i++)
         {
             Vector3 v = transform.TransformPoint(mesh.vertices[i]);
             Vector3 relative_point = slice_transform.InverseTransformPoint(v);
+            //compare relative vertex x to the slice x
             if (relative_point.x < 0.0f)
             {
                 left_verts.Add(mesh.vertices[i]);
