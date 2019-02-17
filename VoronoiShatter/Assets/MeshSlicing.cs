@@ -25,11 +25,6 @@ public class MeshSlicing : MonoBehaviour
     public float slice_angle = 0.0f;
     private Ray ray;
     private Transform slice_transform;
-
-    private List<int> left_triangles = new List<int>();
-    private List<Vector3> left_verts = new List<Vector3>();
-    private List<Vector2> left_uvs = new List<Vector2>();
-    private List<Vector3> left_normals = new List<Vector3>();
     // Start is called before the first frame update
     void Start()
     {
@@ -102,8 +97,6 @@ public class MeshSlicing : MonoBehaviour
         right_points.Clear();
         left_points.Clear();
         start_point = start;
-
-        //I thought this AT would be easy. I was wrong.
 
         GameObject slice_viewer = new GameObject();
         slice_transform = slice_viewer.transform;
@@ -299,12 +292,17 @@ public class MeshSlicing : MonoBehaviour
                 {
                     if (mesh_verts[z] == new_verts[j] && mesh_uvs[z] == new_uvs[j] && mesh_normals[z] == new_normals[j])
                     {
-                        //first vert is valid
-                        tri_indexes[z] = j;
-                        invalid_count--;
+                        if (tri_indexes[z] == -1)
+                        {
+                            //first vert is valid
+                            tri_indexes[z] = j;
+                            invalid_count--;
+                            Debug.Log(z);
+                        }
                     }
                 }
             }
+          //  Debug.Log(invalid_count);
             if (tri_indexes[0] != -1 && tri_indexes[1] != -1 && tri_indexes[2] != -1)
             {
                 //if all 3 verts are valid, add triangle
@@ -313,7 +311,7 @@ public class MeshSlicing : MonoBehaviour
                     rebuilt_tris.Add(tri_indexes[z]);
                 }
             }
-            else if (invalid_count > 0 && invalid_count < 3)
+            else if (invalid_count == 2)
             {
                 int[] temp_tri_index = tri_indexes;
                 for (int z = 0; z < 3; z++)
@@ -326,7 +324,7 @@ public class MeshSlicing : MonoBehaviour
                         int valid_index = int.MinValue;
                         for (int k = 0; k < 3; k++)
                         {
-                            if(side)
+                            if (side)
                             {
                                 if (IsRelative(i + k))
                                 {
@@ -336,7 +334,6 @@ public class MeshSlicing : MonoBehaviour
                                     {
                                         nearest_valid = current_valid;
                                         valid_index = k;
-                                        left_points.Add(transform.TransformPoint(current_valid));
                                     }
                                 }
                             }
@@ -350,13 +347,11 @@ public class MeshSlicing : MonoBehaviour
                                     {
                                         nearest_valid = current_valid;
                                         valid_index = k;
-                                        left_points.Add(transform.TransformPoint(current_valid));
                                     }
                                 }
                             }
                         }
-                        Vector3 new_point;
-                        new_point = transform.InverseTransformPoint(MoveTrianglePoint(i, z, valid_index, side));
+                        Vector3 new_point = transform.InverseTransformPoint(MoveTrianglePoint(i, z, valid_index, side));
                         new_verts.Add(new_point);
                         new_uvs.Add(mesh_uvs[z]);
                         new_normals.Add(mesh_normals[z]);
@@ -368,6 +363,58 @@ public class MeshSlicing : MonoBehaviour
                         rebuilt_tris.Add(tri_indexes[z]);
                     }
                 }
+            }
+            else if (invalid_count == 1)
+            {
+                Vector3 invalid_vert;
+                Vector3 valid_vert_1 = Vector3.zero;
+                Vector3 valid_vert_2 = Vector3.zero;
+                int invalid_idx = -1, valid_idx_1 = -1, valid_idx_2 = -1;
+                for (int z = 0; z < 3; z++)
+                {
+                    if (tri_indexes[z] == -1)
+                    {
+                        invalid_vert = mesh_verts[z];
+                        invalid_idx = z;
+                    }
+                    else if (valid_vert_1 == Vector3.zero)
+                    {
+                        valid_vert_1 = mesh_verts[z];
+                        valid_idx_1 = z;
+                    }
+                    else
+                    {
+                        valid_vert_2 = mesh_verts[z];
+                        valid_idx_2 = z;
+                    }
+                }
+                if (invalid_idx == -1 || valid_idx_1 == -1 || valid_idx_2 == -1)
+                {
+                    Debug.Log("oh shit " + invalid_idx + " " + valid_idx_1 + " " + valid_idx_2);
+                    Debug.Log(tri_indexes[0] + " " + tri_indexes[1] + " " + tri_indexes[2]);
+                }
+
+                //build first triangle by moving old vert to new point
+                Vector3 new_point = transform.InverseTransformPoint(MoveTrianglePoint(i, invalid_idx, valid_idx_1, side));
+                new_verts.Add(new_point);
+                new_uvs.Add(mesh_uvs[invalid_idx]);
+                new_normals.Add(mesh_normals[invalid_idx]);
+                tri_indexes[invalid_idx] = new_verts.Count - 1;
+                rebuilt_tris.Add(tri_indexes[0]);
+                rebuilt_tris.Add(tri_indexes[1]);
+                rebuilt_tris.Add(tri_indexes[2]);
+
+                //build second triangle by using point from the first and secondary new point
+                Vector3 secondary_point = transform.InverseTransformPoint(MoveTrianglePoint(i, invalid_idx, valid_idx_2, side));
+                new_verts.Add(secondary_point);
+                new_uvs.Add(mesh_uvs[invalid_idx]);
+                new_normals.Add(mesh_normals[invalid_idx]);
+                tri_indexes[invalid_idx] = new_verts.Count - 1;
+                tri_indexes[valid_idx_1] = new_verts.Count - 2;
+                rebuilt_tris.Add(tri_indexes[0]);
+                rebuilt_tris.Add(tri_indexes[1]);
+                rebuilt_tris.Add(tri_indexes[2]);
+
             }
         }
         current_mesh.Clear();
@@ -454,7 +501,7 @@ public class MeshSlicing : MonoBehaviour
                 invalid = Vector3.MoveTowards(invalid, valid, 0.01f);
                 count++;
                 relative_point = slice_transform.InverseTransformPoint(invalid);
-                if (count > 1500)
+                if (count > 3000)
                 {
                     Debug.Log("BROKE OUT OF THE WHILE LOOP");
                     break;
@@ -468,7 +515,7 @@ public class MeshSlicing : MonoBehaviour
                 invalid = Vector3.MoveTowards(invalid, valid, 0.01f);
                 count++;
                 relative_point = slice_transform.InverseTransformPoint(invalid);
-                if (count > 1500)
+                if (count > 3000)
                 {
                     Debug.Log("BROKE OUT OF THE WHILE LOOP");
                     break;
