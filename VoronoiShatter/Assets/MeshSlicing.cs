@@ -266,6 +266,7 @@ public class MeshSlicing : MonoBehaviour
 
         List<int> rebuilt_tris = new List<int>();
         int v_count = new_verts.Count;
+        List<Vector3> slice_vertices = new List<Vector3>();
         //add triangles from existing verts
         for (int i = 0; i < tris.Length; i += 3)
         {
@@ -297,7 +298,6 @@ public class MeshSlicing : MonoBehaviour
                             //first vert is valid
                             tri_indexes[z] = j;
                             invalid_count--;
-                            Debug.Log(z);
                         }
                     }
                 }
@@ -357,6 +357,7 @@ public class MeshSlicing : MonoBehaviour
                         new_normals.Add(mesh_normals[z]);
                         tri_indexes[z] = new_verts.Count - 1;
                         rebuilt_tris.Add(tri_indexes[z]);
+                        slice_vertices.Add(new_point);
                     }
                     else
                     {
@@ -403,6 +404,7 @@ public class MeshSlicing : MonoBehaviour
                 rebuilt_tris.Add(tri_indexes[0]);
                 rebuilt_tris.Add(tri_indexes[1]);
                 rebuilt_tris.Add(tri_indexes[2]);
+                slice_vertices.Add(new_point);
 
                 //build second triangle by using point from the first and secondary new point
                 Vector3 secondary_point = transform.InverseTransformPoint(MoveTrianglePoint(i, invalid_idx, valid_idx_2, side));
@@ -414,9 +416,114 @@ public class MeshSlicing : MonoBehaviour
                 rebuilt_tris.Add(tri_indexes[0]);
                 rebuilt_tris.Add(tri_indexes[1]);
                 rebuilt_tris.Add(tri_indexes[2]);
+                slice_vertices.Add(secondary_point);
 
             }
         }
+
+        Vector3 center = Vector3.zero;
+        for (int t = 0; t < slice_vertices.Count; t++)
+        {
+            center += slice_vertices[t];
+        }
+        center = center / slice_vertices.Count;
+
+        //WIP TO SOLVE EDGE FACES
+        //add points from original mesh that should also be on the slice vertices
+        //for (int v = 0; v < new_verts.Count; v++)
+        //{
+        //    Vector3 local_vert = new_verts[v];
+        //    Vector3 world_vert = transform.TransformPoint(local_vert);
+        //    Vector3 relative_point = slice_transform.InverseTransformPoint(world_vert);
+        //    if(relative_point.x < 0.8f && relative_point.x > -0.8f)
+        //    {
+        //        slice_vertices.Add(new_verts[v]);
+        //    }
+        //}
+
+        //find duplicate points on slice
+        for (int v = 0; v < slice_vertices.Count; v++)
+        {
+            for(int v2 = 0; v2 < slice_vertices.Count; v2++)
+            {
+                if(v != v2 && Vector3.Distance(slice_vertices[v],slice_vertices[v2]) < 0.1f)
+                {
+                   // found duplicate
+                    if ((slice_vertices.Count - 1) > v)
+                    {
+                        slice_vertices.RemoveAt(v);
+                    }
+                }
+            }
+        }
+
+
+        if(side)
+        {
+            slice_vertices.Sort(SortClockWise);
+        }
+        else
+        {
+            slice_vertices.Sort(SortAntiClockWise);
+        }
+
+        //normal of the slice direction depending on side
+        Vector3 normal;
+        if(side)
+        {
+            normal = (-slice_transform.right).normalized;
+        }
+        else
+        {
+            normal = (slice_transform.right).normalized;
+        }
+        List<int> slice_indexes = new List<int>();
+
+        //make new verts based on slice point, add indexes for triangle order
+        for (int p = 0; p < slice_vertices.Count; p++)
+        {
+            //create new uvs for the new slice points
+            Vector2 new_uv = transform.worldToLocalMatrix.MultiplyPoint(slice_vertices[p]);
+            new_uv.x += 0.5f;
+            new_uv.y += 0.5f;
+
+            new_verts.Add(slice_vertices[p]);
+            new_uvs.Add(new_uv);
+            new_normals.Add(normal);
+            slice_indexes.Add(new_verts.Count - 1);
+        }
+        Vector2 center_uv = transform.worldToLocalMatrix.MultiplyPoint(center);
+        center_uv.x += 0.5f;
+        center_uv.y += 0.5f;
+
+        new_verts.Add(center);
+        new_uvs.Add(center_uv);
+        new_normals.Add(normal);
+
+        //create triangles in clockwise order and join the last with the first
+        for (int i = 0; i < slice_vertices.Count; i++)
+        {
+            if(i < slice_vertices.Count - 1)
+            {
+                rebuilt_tris.Add(slice_indexes[i]);
+                rebuilt_tris.Add(slice_indexes[i+1]);
+                rebuilt_tris.Add(new_verts.Count - 1);
+            }
+            else
+            {
+                rebuilt_tris.Add(slice_indexes[i]);
+                rebuilt_tris.Add(slice_indexes[0]);
+                rebuilt_tris.Add(new_verts.Count - 1);
+            }
+        }
+
+
+        //view slice points in scene view
+        for (int q = 0; q < slice_vertices.Count; q++)
+        {
+            left_points.Add(transform.TransformPoint(slice_vertices[q]));
+        }
+
         current_mesh.Clear();
         current_mesh.vertices = new_verts.ToArray();
         current_mesh.uv = new_uvs.ToArray();
@@ -425,6 +532,29 @@ public class MeshSlicing : MonoBehaviour
         current_mesh.RecalculateNormals();
         current_mesh.RecalculateBounds();
         current_mesh.RecalculateTangents();
+    }
+
+    int SortByHeight(Vector3 v1, Vector3 v2)
+    {
+        return v1.y.CompareTo(v2.y);
+    }
+
+    public int SortClockWise(Vector3 v1, Vector3 v2)
+    {
+
+        Vector3 world_vert1 = transform.TransformPoint(v1);
+        Vector3 world_vert2 = transform.TransformPoint(v2);
+        Vector3 rv1 = slice_transform.InverseTransformPoint(world_vert1);
+        Vector3 rv2 = slice_transform.InverseTransformPoint(world_vert2);
+        return Mathf.Atan2(rv1.y, -rv1.z).CompareTo(Mathf.Atan2(rv2.y, -rv2.z));
+    }
+    public int SortAntiClockWise(Vector3 v1, Vector3 v2)
+    {
+        Vector3 world_vert1 = transform.TransformPoint(v1);
+        Vector3 world_vert2 = transform.TransformPoint(v2);
+        Vector3 rv1 = slice_transform.InverseTransformPoint(world_vert1);
+        Vector3 rv2 = slice_transform.InverseTransformPoint(world_vert2);
+        return Mathf.Atan2(rv1.y, rv1.z).CompareTo(Mathf.Atan2(rv2.y, rv2.z));
     }
 
     void MoveTowardRelative(int tri_index, Vector3 point, bool side)
@@ -453,7 +583,6 @@ public class MeshSlicing : MonoBehaviour
                             break;
                         }
                     }
-                    right_points.Add(world_vert);
                 }
             }
         }
@@ -480,7 +609,6 @@ public class MeshSlicing : MonoBehaviour
                             break;
                         }
                     }
-                    left_points.Add(world_vert);
                 }
             }
         }
