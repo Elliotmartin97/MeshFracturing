@@ -9,38 +9,37 @@ using System.Linq;
 
 public class MeshSlicing : MonoBehaviour
 {
+    public int iterations;
     public float radius = 0.025f;
     private Mesh mesh;
     private GameObject cam_pos;
-    public Vector3 start_point;
-    public List<Vector3> right_points = new List<Vector3>();
-    public List<Vector3> left_points = new List<Vector3>();
     private Vector3 min_dist;
-    private Vector3 vwp;
     public Vector3 center;
     private MeshCollider mesh_col;
-    private Color point_color;
     private GameObject copy;
-    //public GameObject slice_viewer;
     public float slice_angle = 0.0f;
-    private Ray ray;
     private Transform slice_transform;
+    private Camera cam;
+
     // Start is called before the first frame update
     void Start()
     {
+        Init();
+    }
+
+    void Init()
+    {
         cam_pos = GameObject.Find("Main Camera");
+        cam = cam_pos.GetComponent<Camera>();
         mesh = GetComponent<MeshFilter>().mesh;
         mesh_col = GetComponent<MeshCollider>();
-        point_color = Color.green;
-        copy = gameObject;
     }
 
     // Update is called once per frame
     void Update()
     {
         center = transform.TransformPoint(mesh.bounds.center);
-        Camera cam = cam_pos.GetComponent<Camera>();
-        ray = cam.ScreenPointToRay(Input.mousePosition);
+        Ray ray = cam.ScreenPointToRay(Input.mousePosition);
         RaycastHit hit;
         if (Physics.Raycast(ray, out hit, 1000))
         {
@@ -48,7 +47,15 @@ public class MeshSlicing : MonoBehaviour
             {
                 if (Input.GetMouseButtonDown(0))
                 {
-                    Slice(hit.point);
+                    GameObject slice_viewer = new GameObject();
+                    Transform slice_tran = slice_viewer.transform;
+                    slice_tran.position = hit.point;
+                    slice_tran.rotation = Quaternion.LookRotation(ray.direction);
+                    slice_tran.Rotate(slice_tran.rotation.x, slice_tran.rotation.y, slice_angle);
+                    gameObject.AddComponent<Rigidbody>();
+                    Slice(slice_tran);
+
+                    Destroy(slice_viewer);
                 }
                 //Slice(hit.point);
             }
@@ -64,46 +71,11 @@ public class MeshSlicing : MonoBehaviour
         }
     }
 
-    private void OnDrawGizmos()
+
+    void Slice(Transform slice_T)
     {
-        Gizmos.color = Color.red;
-        if (start_point != Vector3.zero)
-        {
-            Gizmos.DrawSphere(start_point, radius);
-        }
-        if (right_points.Count > 0)
-        {
-            for(int i = 0; i < right_points.Count; i++)
-            {
-                Gizmos.color = point_color;
-                Gizmos.DrawSphere(right_points[i], radius);
-            }
-           
-        }
-        if (left_points.Count > 0)
-        {
-            for (int i = 0; i < left_points.Count; i++)
-            {
-                Gizmos.color = Color.blue;
-                Gizmos.DrawSphere(left_points[i], radius);
-            }
-
-        }
-
-    }
-
-    void Slice(Vector3 start)
-    {
-        right_points.Clear();
-        left_points.Clear();
-        start_point = start;
-
-        GameObject slice_viewer = new GameObject();
-        slice_transform = slice_viewer.transform;
-        slice_transform.position = start;
-        slice_transform.rotation = Quaternion.LookRotation(ray.direction);
-        slice_transform.Rotate(transform.forward, -slice_angle);
-
+        Init();
+        slice_transform = slice_T;
 
         List<Vector3> left_verts = new List<Vector3>();
         List<Vector2> left_uvs = new List<Vector2>();
@@ -113,7 +85,6 @@ public class MeshSlicing : MonoBehaviour
         List<Vector2> right_uvs = new List<Vector2>();
         List<Vector3> right_normals = new List<Vector3>();
 
-        GenerateSlicePoints(slice_transform); //<- redo this it's trash and doesn't work
 
         for (int i = 0; i < mesh.vertexCount; i++)
         {
@@ -133,53 +104,53 @@ public class MeshSlicing : MonoBehaviour
                 right_normals.Add(mesh.normals[i]);
             }
         }
-        GameObject new_obj = Instantiate(copy);
-
+        iterations--;
+        copy = gameObject;
+        GameObject right_obj = Instantiate(copy);
+        GameObject left_obj = Instantiate(copy);
         Mesh old_mesh = new Mesh();
         old_mesh.vertices = mesh.vertices;
         old_mesh.uv = mesh.uv;
         old_mesh.normals = mesh.normals;
         old_mesh.triangles = mesh.triangles;
 
-        Mesh left_mesh = mesh;
-
-        new_obj.name = gameObject.name + "_right";
-        Mesh right_mesh = new_obj.GetComponent<MeshFilter>().mesh;
-        RebuildMesh(right_mesh, old_mesh, right_verts, right_uvs, right_normals, false);
-        new_obj.GetComponent<MeshFilter>().mesh = right_mesh;
-        new_obj.GetComponent<MeshCollider>().sharedMesh = right_mesh;
-
+        left_obj.name = gameObject.name + "_left";
+        Mesh left_mesh = left_obj.GetComponent<MeshFilter>().mesh;
         RebuildMesh(left_mesh, old_mesh, left_verts, left_uvs, left_normals, true);
-        gameObject.name = gameObject.name + "_left";
-        mesh = left_mesh;
-        mesh_col.sharedMesh = mesh;
-        Destroy(slice_viewer);
-    }
+        left_obj.GetComponent<MeshFilter>().mesh = left_mesh;
+        left_obj.GetComponent<MeshCollider>().sharedMesh = left_mesh;
 
-    void GenerateSlicePoints(Transform slice_dir)
-    {
-        int[] tris = mesh.triangles;
-        Vector3[] verts = mesh.vertices;
-        Vector2[] uvs = mesh.uv;
-        Vector3[] normals = mesh.normals;
-        for (int i = 0; i < tris.Length; i += 3)
+
+        right_obj.name = gameObject.name + "_right";
+        Mesh right_mesh = right_obj.GetComponent<MeshFilter>().mesh;
+        RebuildMesh(right_mesh, old_mesh, right_verts, right_uvs, right_normals, false);
+        right_obj.GetComponent<MeshFilter>().mesh = right_mesh;
+        right_obj.GetComponent<MeshCollider>().sharedMesh = right_mesh;
+
+
+
+        if (iterations > 0)
         {
-            int invalid = 0;
-            //only generate points on faces are sliced
-            for (int idx = 0; idx < 3; idx++)
-            {
-                if(!IsRelative(i + idx))
-                {
-                    invalid++;
-                }
-            }
-            if (invalid > 0 && invalid < 3)
-            {
-                //slicing through this triangle
-                SetSlicePoints(i, true, invalid);
-                SetSlicePoints(i, false, invalid);
-            }
+            GameObject temp_left = new GameObject();
+            GameObject temp_right = new GameObject();
+
+            Transform left_slice = temp_left.transform;
+            left_slice.position = transform.TransformPoint(left_mesh.bounds.center);
+            left_slice.rotation = Quaternion.LookRotation(-slice_transform.right);
+            left_slice.Rotate(left_slice.rotation.x, left_slice.rotation.y, slice_angle);
+            left_obj.GetComponent<MeshSlicing>().Slice(left_slice);
+
+            Transform right_slice = temp_right.transform;
+            right_slice.position = transform.TransformPoint(right_mesh.bounds.center);
+            right_slice.rotation = Quaternion.LookRotation(slice_transform.right);
+            right_slice.Rotate(right_slice.rotation.x, right_slice.rotation.y, slice_angle);
+            right_obj.GetComponent<MeshSlicing>().Slice(right_slice);
+
+            Destroy(temp_left);
+            Destroy(temp_right);
+            
         }
+        Destroy(gameObject);
     }
 
     bool IsRelative(int vert_index)
@@ -198,58 +169,6 @@ public class MeshSlicing : MonoBehaviour
         }
     }
 
-    void SetSlicePoints(int tri_index, bool side, int invalid_count)
-    {
-        int[] tris = mesh.triangles;
-        if (side)
-        {
-            Vector3 nearest_valid = Vector3.positiveInfinity;
-            Vector3 current_invalid = Vector3.positiveInfinity;
-            for (int i = 0; i < 3; i++)
-            {
-                if (!IsRelative(tri_index + i))
-                {
-                    current_invalid = mesh.vertices[tris[tri_index + i]];
-                }
-            }
-            for (int z = 0; z < 3; z++)
-            {
-                Vector3 v = transform.TransformPoint(mesh.vertices[tris[tri_index + z]]);
-                if (IsRelative(tri_index + z))
-                {
-                    if (Vector3.Distance(current_invalid, v) < Vector3.Distance(current_invalid, nearest_valid))
-                    {
-                        nearest_valid = v;
-                    }
-                }
-            }
-            MoveTowardRelative(tri_index, nearest_valid, true);
-        }
-        else
-        {
-            Vector3 nearest_invalid = Vector3.positiveInfinity;
-            Vector3 current_valid = Vector3.positiveInfinity;
-            for (int i = 0; i < 3; i++)
-            {
-                if (IsRelative(tri_index + i))
-                {
-                    current_valid = mesh.vertices[tris[tri_index + i]];
-                }
-            }
-            for (int z = 0; z < 3; z++)
-            {
-                Vector3 v = transform.TransformPoint(mesh.vertices[tris[tri_index + z]]);
-                if (!IsRelative(tri_index + z))
-                {
-                    if (Vector3.Distance(current_valid, v) < Vector3.Distance(current_valid, nearest_invalid))
-                    {
-                        nearest_invalid = v;
-                    }
-                }
-            }  
-            MoveTowardRelative(tri_index, nearest_invalid, false);
-        }
-    }
 
     void RebuildMesh(Mesh current_mesh, Mesh old_mesh, List<Vector3> new_verts, List<Vector2> new_uvs, List<Vector3> new_normals, bool side)
     {
@@ -519,10 +438,6 @@ public class MeshSlicing : MonoBehaviour
 
 
         //view slice points in scene view
-        for (int q = 0; q < slice_vertices.Count; q++)
-        {
-            left_points.Add(transform.TransformPoint(slice_vertices[q]));
-        }
 
         current_mesh.Clear();
         current_mesh.vertices = new_verts.ToArray();
@@ -546,6 +461,7 @@ public class MeshSlicing : MonoBehaviour
         Vector3 world_vert2 = transform.TransformPoint(v2);
         Vector3 rv1 = slice_transform.InverseTransformPoint(world_vert1);
         Vector3 rv2 = slice_transform.InverseTransformPoint(world_vert2);
+
         return Mathf.Atan2(rv1.y, -rv1.z).CompareTo(Mathf.Atan2(rv2.y, -rv2.z));
     }
     public int SortAntiClockWise(Vector3 v1, Vector3 v2)
@@ -557,62 +473,6 @@ public class MeshSlicing : MonoBehaviour
         return Mathf.Atan2(rv1.y, rv1.z).CompareTo(Mathf.Atan2(rv2.y, rv2.z));
     }
 
-    void MoveTowardRelative(int tri_index, Vector3 point, bool side)
-    {
-        int[] tris = mesh.triangles;
-        if (side)
-        {
-            for (int i = 0; i < 3; i++)
-            {
-                if (!IsRelative(tri_index + i))
-                {
-                    Vector3 local_vert = mesh.vertices[tris[tri_index + i]];
-                    Vector3 world_vert = transform.TransformPoint(local_vert);
-                    Vector3 relative_point = slice_transform.InverseTransformPoint(world_vert);
-                    int count = 0;
-
-                    while (relative_point.x > 0.0f)
-                    {
-                        world_vert = Vector3.MoveTowards(world_vert, point, 0.005f);
-                        count++;
-                        relative_point = slice_transform.InverseTransformPoint(world_vert);
-                        if (count > 1500)
-                        {
-                            Debug.Log("BROKE OUT OF THE WHILE LOOP");
-                            Debug.Log(point);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        else
-        {
-            for (int i = 0; i < 3; i++)
-            {
-                if (IsRelative(tri_index + i))
-                {
-                    Vector3 local_vert = mesh.vertices[tris[tri_index + i]];
-                    Vector3 world_vert = transform.TransformPoint(local_vert);
-                    Vector3 relative_point = slice_transform.InverseTransformPoint(world_vert);
-                    int count = 0;
-
-                    while (relative_point.x < 0.0f)
-                    {
-                        world_vert = Vector3.MoveTowards(world_vert, point, 0.005f);
-                        count++;
-                        relative_point = slice_transform.InverseTransformPoint(world_vert);
-                        if (count > 1500)
-                        {
-                            Debug.Log("BROKE OUT OF THE WHILE LOOP");
-                            Debug.Log(point);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     Vector3 MoveTrianglePoint(int tri_index, int invalid_index, int valid_index, bool side)
     {
