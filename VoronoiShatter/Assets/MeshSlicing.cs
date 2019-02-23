@@ -473,11 +473,34 @@ public class MeshSlicing : MonoBehaviour
     Vector3 MoveTrianglePoint(int tri_index, int invalid_index, int valid_index, bool side)
     {
         int[] tris = mesh.triangles;
-
+        Vector3 local_valid = mesh.vertices[tris[tri_index + valid_index]];
+        Vector3 local_invalid = mesh.vertices[tris[tri_index + invalid_index]];
         Vector3 valid = transform.TransformPoint(mesh.vertices[tris[tri_index + valid_index]]);
         Vector3 invalid = transform.TransformPoint(mesh.vertices[tris[tri_index + invalid_index]]);
         Vector3 relative_point = slice_transform.InverseTransformPoint(invalid);
+        Vector3 yellow = relative_point;
+        yellow.x = 0;
+
+        float a = Vector3.Distance(local_invalid, yellow);
+        float b = Vector3.Distance(yellow, local_valid);
+        float c = Vector3.Distance(local_invalid, local_valid);
+
+        float arccosA = Mathf.Acos(((b * b) + (c * c) - (a * a)) / ((b * c) * 2));
+        float arccosB = Mathf.Acos(((a * a) + (c * c) - (b * b)) / ((a * c) * 2));
+        float arccosC = Mathf.Acos(((a * a) + (b * b) - (c * c)) / ((a * b) * 2));
+
+        float remains = 180 - 90 - arccosA;
+        Debug.Log(arccosA);
+        float hypL = a * Mathf.Sin(arccosB) / Mathf.Sin(arccosA);
+        float opL = (a * Mathf.Sin(arccosC)) / Mathf.Sin(arccosA);
+
+
+        relative_point.x = 0;
+       // relative_point.y = invalid.y + opL;
+
+        return slice_transform.TransformPoint(relative_point);
         int count = 0;
+      
         if (side)
         {
             while (relative_point.x > 0.0f)

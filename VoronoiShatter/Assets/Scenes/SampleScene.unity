@@ -353,7 +353,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 77295108}
   m_LocalRotation: {x: 0, y: 0, z: 0.7071068, w: 0.7071068}
-  m_LocalPosition: {x: -2.572, y: 2.535, z: -2.96}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}
@@ -629,8 +629,8 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 534669902}
-  m_LocalRotation: {x: 0.30344042, y: 0.33193663, z: -0.11369994, w: 0.88589746}
-  m_LocalPosition: {x: -0.5118866, y: 1.7264923, z: -6.5411744}
+  m_LocalRotation: {x: 0.022500204, y: 0.011686952, z: -0.00009489806, w: 0.9996785}
+  m_LocalPosition: {x: -2.6266503, y: 2.6402397, z: -5.2962723}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}
@@ -668,9 +668,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4c02dfceacc31f043995b14f9b40cb06, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  iterations: 4
+  iterations: 0
   slice_angle: 0
-  add_rigidbody: 1
+  add_rigidbody: 0
   center: {x: 0, y: 0, z: 0}
 --- !u!64 &786676856
 MeshCollider:
