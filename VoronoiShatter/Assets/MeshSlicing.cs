@@ -4,20 +4,17 @@ using UnityEngine;
 using System.Linq;
 
 
-// TO DO
-//Rebuilding triangles currently gets nearest point from invalid vert, ends up in middle, maybe rebuild triangles when generating points as the old points are simply moved to slice pos 
-
 public class MeshSlicing : MonoBehaviour
 {
     public int iterations;
-    public float radius = 0.025f;
+    public float slice_angle = 0.0f;
+    public bool add_rigidbody = false;
     private Mesh mesh;
     private GameObject cam_pos;
     private Vector3 min_dist;
     public Vector3 center;
     private MeshCollider mesh_col;
     private GameObject copy;
-    public float slice_angle = 0.0f;
     private Transform slice_transform;
     private Camera cam;
 
@@ -52,7 +49,11 @@ public class MeshSlicing : MonoBehaviour
                     slice_tran.position = hit.point;
                     slice_tran.rotation = Quaternion.LookRotation(ray.direction);
                     slice_tran.Rotate(slice_tran.rotation.x, slice_tran.rotation.y, slice_angle);
-                    gameObject.AddComponent<Rigidbody>();
+
+                    if(add_rigidbody)
+                    {
+                        gameObject.AddComponent<Rigidbody>();
+                    }
                     Slice(slice_tran);
 
                     Destroy(slice_viewer);
@@ -449,11 +450,6 @@ public class MeshSlicing : MonoBehaviour
         current_mesh.RecalculateTangents();
     }
 
-    int SortByHeight(Vector3 v1, Vector3 v2)
-    {
-        return v1.y.CompareTo(v2.y);
-    }
-
     public int SortClockWise(Vector3 v1, Vector3 v2)
     {
 
@@ -495,6 +491,7 @@ public class MeshSlicing : MonoBehaviour
                     break;
                 }
             }
+
         }
         else
         {
