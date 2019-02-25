@@ -481,30 +481,39 @@ public class MeshSlicing : MonoBehaviour
         relative_point.x = 0;
         relative_point.z = 0;
 
-        //correct
-        float a = Vector3.Distance(local_invalid, relative_point);
-        float b = Vector3.Distance(relative_point, local_valid);
-        float c = Vector3.Distance(local_invalid, local_valid);
-        Debug.Log(local_invalid);
-        Debug.Log(local_valid);
-        Debug.Log(relative_point);
 
-        //???
-        float arccosA = Mathf.Acos(((b * b) + (c * c) - (a * a)) / ((b * c) * 2));
-        float arccosB = Mathf.Acos(((a * a) + (c * c) - (b * b)) / ((a * c) * 2));
-        float arccosC = Mathf.Acos(((a * a) + (b * b) - (c * c)) / ((a * b) * 2));
+        //TRIGANOMETRY
+        ////correct
+        //float a = Vector3.Distance(local_invalid, relative_point);
+        //float b = Vector3.Distance(relative_point, local_valid);
+        //float c = Vector3.Distance(local_invalid, local_valid);
 
-        float remains = 180 - 90 - arccosA;
+        ////???
+        //float arccosA = Mathf.Acos(((b * b) + (c * c) - (a * a)) / ((b * c) * 2));
+        //Vector3 direction = local_invalid - relative_point;
+        //arccosA = Vector3.Angle(local_valid, direction);
+        //float arccosB = 180 - 90 - arccosA;
+        //float arccosC = 90;
 
-        //???
-        float hypL = (a * Mathf.Sin(arccosB)) / Mathf.Sin(arccosA);
-        float opL = (a * Mathf.Sin(arccosC)) / Mathf.Sin(arccosA);
-       // Debug.Log(opL);
-        Vector3 new_point = slice_transform.TransformPoint(relative_point);
 
-        new_point.y = transform.TransformPoint(local_invalid).y - opL;
-        new_point.z = invalid.z;
+        ////???
+        //float hypL = a * Mathf.Sin(arccosB) / Mathf.Sin(arccosA);
+        //float opL = (a * Mathf.Sin(arccosA)) / Mathf.Sin(arccosB);
+        //Debug.Log(opL);
+        //Vector3 new_point = slice_transform.TransformPoint(relative_point);
 
+        //new_point.y = transform.TransformPoint(local_invalid).y - opL;
+        //new_point.z = invalid.z;
+
+        //LINE INTERSECTION
+
+        Vector3 LineA1 = local_invalid;
+        Vector3 LineA2 = local_valid;
+        Vector3 LineB1 = relative_point;
+        Vector3 LineB2 = relative_point;
+        LineB2.y = local_valid.y;
+
+        Vector3 new_point = (transform.TransformPoint(GetLineIntersectionPoint(LineA1, LineA2, LineB1, LineB2)));
         return new_point;
         int count = 0;
       
@@ -538,5 +547,26 @@ public class MeshSlicing : MonoBehaviour
             }
         }
         return invalid;
+    }
+
+    public Vector3 GetLineIntersectionPoint(Vector3 A1, Vector3 A2, Vector3 B1, Vector3 B2)
+    {
+
+        float tmp = (B2.x - B1.x) * (A2.y - A1.y) - (B2.y - B1.y) * (A2.x - A1.x);
+
+        if (tmp == 0)
+        {
+            // No solution!
+            return Vector3.zero;
+        }
+
+        float mu = ((A1.x - B1.x) * (A2.y - A1.y) - (A1.y - B1.y) * (A2.x - A1.x)) / tmp;
+
+
+        return new Vector3(
+            B1.x + (B2.x - B1.x) * mu,
+            B1.y + (B2.y - B1.y) * mu,
+            B1.z + (B2.z - B1.z) * mu
+        );
     }
 }
