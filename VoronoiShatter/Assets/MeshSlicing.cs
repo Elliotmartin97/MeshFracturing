@@ -13,9 +13,11 @@ public class MeshSlicing : MonoBehaviour
     private GameObject cam_pos;
     private Vector3 min_dist;
     public Vector3 center;
+    public bool trim = false;
     private MeshCollider mesh_col;
     private GameObject copy;
     private Transform slice_transform;
+    private bool original = true;
     private Camera cam;
 
     // Start is called before the first frame update
@@ -50,9 +52,12 @@ public class MeshSlicing : MonoBehaviour
                     slice_tran.rotation = Quaternion.LookRotation(ray.direction);
                     slice_tran.Rotate(slice_tran.rotation.x, slice_tran.rotation.y, slice_angle);
 
-                    if(add_rigidbody)
+                    if(!trim)
                     {
-                        gameObject.AddComponent<Rigidbody>();
+                        if (add_rigidbody)
+                        {
+                            gameObject.AddComponent<Rigidbody>();
+                        }
                     }
                     Slice(slice_tran);
 
@@ -105,28 +110,33 @@ public class MeshSlicing : MonoBehaviour
                 right_normals.Add(mesh.normals[i]);
             }
         }
+
         iterations--;
         copy = gameObject;
         GameObject right_obj = Instantiate(copy);
         GameObject left_obj = Instantiate(copy);
+
         Mesh old_mesh = new Mesh();
         old_mesh.vertices = mesh.vertices;
         old_mesh.uv = mesh.uv;
         old_mesh.normals = mesh.normals;
         old_mesh.triangles = mesh.triangles;
 
+
         left_obj.name = gameObject.name + "_left";
         Mesh left_mesh = left_obj.GetComponent<MeshFilter>().mesh;
-        RebuildMesh(left_mesh, old_mesh, left_verts, left_uvs, left_normals, true);
+        RebuildMesh(left_mesh, old_mesh, left_verts, left_uvs, left_normals, true, false);
         left_obj.GetComponent<MeshFilter>().mesh = left_mesh;
         left_obj.GetComponent<MeshCollider>().sharedMesh = left_mesh;
 
 
         right_obj.name = gameObject.name + "_right";
         Mesh right_mesh = right_obj.GetComponent<MeshFilter>().mesh;
-        RebuildMesh(right_mesh, old_mesh, right_verts, right_uvs, right_normals, false);
+        RebuildMesh(right_mesh, old_mesh, right_verts, right_uvs, right_normals, false, false);
         right_obj.GetComponent<MeshFilter>().mesh = right_mesh;
         right_obj.GetComponent<MeshCollider>().sharedMesh = right_mesh;
+        
+
 
 
 
@@ -135,23 +145,74 @@ public class MeshSlicing : MonoBehaviour
             GameObject temp_left = new GameObject();
             GameObject temp_right = new GameObject();
 
-            Transform left_slice = temp_left.transform;
-            left_slice.position = transform.TransformPoint(left_mesh.bounds.center);
-            left_slice.rotation = Quaternion.LookRotation(-slice_transform.right);
-            left_slice.Rotate(left_slice.rotation.x, left_slice.rotation.y, slice_angle);
-            left_obj.GetComponent<MeshSlicing>().Slice(left_slice);
+            if(trim && original)
+            {
+                if(TrimFromCenter(slice_transform))
+                {
+                    if (!left_obj.GetComponent<Rigidbody>())
+                    {
+                        left_obj.AddComponent<Rigidbody>();
+                    }
+                    Transform left_slice = temp_left.transform;
+                    left_slice.position = transform.TransformPoint(left_mesh.bounds.center);
+                    left_slice.rotation = Quaternion.LookRotation(-slice_transform.right);
+                    left_slice.Rotate(left_slice.rotation.x, left_slice.rotation.y, slice_angle);
+                    left_obj.GetComponent<MeshSlicing>().original = false;
+                    left_obj.GetComponent<MeshSlicing>().Slice(left_slice);
+                    right_obj.GetComponent<MeshSlicing>().iterations++;
+                }
+                else
+                {
+                    if (add_rigidbody)
+                    {
+                        if(!right_obj.GetComponent<Rigidbody>())
+                        {
+                            right_obj.AddComponent<Rigidbody>();
+                        }
+                    }
+                    Transform right_slice = temp_right.transform;
+                    right_slice.position = transform.TransformPoint(right_mesh.bounds.center);
+                    right_slice.rotation = Quaternion.LookRotation(slice_transform.right);
+                    right_slice.Rotate(right_slice.rotation.x, right_slice.rotation.y, slice_angle);
+                    right_obj.GetComponent<MeshSlicing>().original = false;
+                    right_obj.GetComponent<MeshSlicing>().Slice(right_slice);
+                    left_obj.GetComponent<MeshSlicing>().iterations++;
+                }
+            }
+            else
+            {
+                Transform left_slice = temp_left.transform;
+                left_slice.position = transform.TransformPoint(left_mesh.bounds.center);
+                left_slice.rotation = Quaternion.LookRotation(-slice_transform.right);
+                left_slice.Rotate(left_slice.rotation.x, left_slice.rotation.y, slice_angle);
+                left_obj.GetComponent<MeshSlicing>().Slice(left_slice);
 
-            Transform right_slice = temp_right.transform;
-            right_slice.position = transform.TransformPoint(right_mesh.bounds.center);
-            right_slice.rotation = Quaternion.LookRotation(slice_transform.right);
-            right_slice.Rotate(right_slice.rotation.x, right_slice.rotation.y, slice_angle);
-            right_obj.GetComponent<MeshSlicing>().Slice(right_slice);
+                Transform right_slice = temp_right.transform;
+                right_slice.position = transform.TransformPoint(right_mesh.bounds.center);
+                right_slice.rotation = Quaternion.LookRotation(slice_transform.right);
+                right_slice.Rotate(right_slice.rotation.x, right_slice.rotation.y, slice_angle);
+                right_obj.GetComponent<MeshSlicing>().Slice(right_slice);
+            }
 
             Destroy(temp_left);
             Destroy(temp_right);
             
         }
         Destroy(gameObject);
+    }
+
+    bool TrimFromCenter(Transform slice_T)
+    {
+        Vector3 world_vert = transform.TransformPoint(mesh.bounds.center);
+        Vector3 relative = slice_T.InverseTransformPoint(world_vert);
+        if(relative.x > 0)
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }
     }
 
     bool IsRelative(int vert_index)
@@ -171,7 +232,7 @@ public class MeshSlicing : MonoBehaviour
     }
 
 
-    void RebuildMesh(Mesh current_mesh, Mesh old_mesh, List<Vector3> new_verts, List<Vector2> new_uvs, List<Vector3> new_normals, bool side)
+    void RebuildMesh(Mesh current_mesh, Mesh old_mesh, List<Vector3> new_verts, List<Vector2> new_uvs, List<Vector3> new_normals, bool side, bool trim)
     {
         Mesh new_mesh = new Mesh();
         new_mesh.vertices = old_mesh.vertices;
@@ -348,19 +409,6 @@ public class MeshSlicing : MonoBehaviour
         }
         center = center / slice_vertices.Count;
 
-        //WIP TO SOLVE EDGE FACES
-        //add points from original mesh that should also be on the slice vertices
-        //for (int v = 0; v < new_verts.Count; v++)
-        //{
-        //    Vector3 local_vert = new_verts[v];
-        //    Vector3 world_vert = transform.TransformPoint(local_vert);
-        //    Vector3 relative_point = slice_transform.InverseTransformPoint(world_vert);
-        //    if(relative_point.x < 0.8f && relative_point.x > -0.8f)
-        //    {
-        //        slice_vertices.Add(new_verts[v]);
-        //    }
-        //}
-
         //find duplicate points on slice
         for (int v = 0; v < slice_vertices.Count; v++)
         {
@@ -478,17 +526,17 @@ public class MeshSlicing : MonoBehaviour
         Vector3 valid = transform.TransformPoint(mesh.vertices[tris[tri_index + valid_index]]);
         Vector3 invalid = transform.TransformPoint(mesh.vertices[tris[tri_index + invalid_index]]);
         Vector3 relative_point = slice_transform.InverseTransformPoint(invalid);
-        relative_point.x = 0;
-        relative_point.z = 0;
 
 
-        //TRIGANOMETRY
-        ////correct
+
+        //TRIGANOMETRY Method
+
+        //relative_point.x = 0;
+        //relative_point.z = 0;
         //float a = Vector3.Distance(local_invalid, relative_point);
         //float b = Vector3.Distance(relative_point, local_valid);
         //float c = Vector3.Distance(local_invalid, local_valid);
 
-        ////???
         //float arccosA = Mathf.Acos(((b * b) + (c * c) - (a * a)) / ((b * c) * 2));
         //Vector3 direction = local_invalid - relative_point;
         //arccosA = Vector3.Angle(local_valid, direction);
@@ -496,7 +544,6 @@ public class MeshSlicing : MonoBehaviour
         //float arccosC = 90;
 
 
-        ////???
         //float hypL = a * Mathf.Sin(arccosB) / Mathf.Sin(arccosA);
         //float opL = (a * Mathf.Sin(arccosA)) / Mathf.Sin(arccosB);
         //Debug.Log(opL);
@@ -507,14 +554,15 @@ public class MeshSlicing : MonoBehaviour
 
         //LINE INTERSECTION
 
-        Vector3 LineA1 = local_invalid;
-        Vector3 LineA2 = local_valid;
-        Vector3 LineB1 = relative_point;
-        Vector3 LineB2 = relative_point;
-        LineB2.y = local_valid.y;
+        //Vector3 LineA1 = local_invalid;
+        //Vector3 LineA2 = local_valid;
+        //Vector3 LineB1 = relative_point;
+        //Vector3 LineB2 = relative_point;
+        //LineB2.y = local_valid.y;
 
-        Vector3 new_point = (transform.TransformPoint(GetLineIntersectionPoint(LineA1, LineA2, LineB1, LineB2)));
-        return new_point;
+        //Vector3 new_point = (transform.TransformPoint(GetLineIntersectionPoint(LineA1, LineA2, LineB1, LineB2)));
+        //return new_point;
+
         int count = 0;
       
         if (side)
