@@ -20,7 +20,6 @@ public class MeshSlicing : MonoBehaviour
     private bool original = true;
     private Camera cam;
 
-    // Start is called before the first frame update
     void Start()
     {
         Init();
@@ -94,8 +93,8 @@ public class MeshSlicing : MonoBehaviour
 
         for (int i = 0; i < mesh.vertexCount; i++)
         {
-            Vector3 v = transform.TransformPoint(mesh.vertices[i]);
-            Vector3 relative_point = slice_transform.InverseTransformPoint(v);
+            Vector3 current_vertex = transform.TransformPoint(mesh.vertices[i]);
+            Vector3 relative_point = slice_transform.InverseTransformPoint(current_vertex);
             //compare relative vertex x to the slice x
             if (relative_point.x < 0.0f)
             {
@@ -299,7 +298,7 @@ public class MeshSlicing : MonoBehaviour
                 {
                     if (temp_tri_index[z] == -1)
                     {
-                        //mesh_verts[z] compare and set then add to new verts
+                        // compare and set then add to new verts
                         Vector3 invalid_vert = mesh_verts[z];
                         Vector3 nearest_valid = Vector3.positiveInfinity;
                         int valid_index = int.MinValue;
@@ -372,7 +371,7 @@ public class MeshSlicing : MonoBehaviour
                 }
                 if (invalid_idx == -1 || valid_idx_1 == -1 || valid_idx_2 == -1)
                 {
-                    Debug.Log("oh shit " + invalid_idx + " " + valid_idx_1 + " " + valid_idx_2);
+                    Debug.Log("oh dear, invalid triangle" + invalid_idx + " " + valid_idx_1 + " " + valid_idx_2);
                     Debug.Log(tri_indexes[0] + " " + tri_indexes[1] + " " + tri_indexes[2]);
                 }
 
@@ -500,7 +499,7 @@ public class MeshSlicing : MonoBehaviour
 
     public int SortClockWise(Vector3 v1, Vector3 v2)
     {
-
+        //sort verts by comparing their angles
         Vector3 world_vert1 = transform.TransformPoint(v1);
         Vector3 world_vert2 = transform.TransformPoint(v2);
         Vector3 rv1 = slice_transform.InverseTransformPoint(world_vert1);
@@ -510,6 +509,7 @@ public class MeshSlicing : MonoBehaviour
     }
     public int SortAntiClockWise(Vector3 v1, Vector3 v2)
     {
+        //sort verts by comparing their angles
         Vector3 world_vert1 = transform.TransformPoint(v1);
         Vector3 world_vert2 = transform.TransformPoint(v2);
         Vector3 rv1 = slice_transform.InverseTransformPoint(world_vert1);
@@ -517,7 +517,7 @@ public class MeshSlicing : MonoBehaviour
         return Mathf.Atan2(rv1.y, rv1.z).CompareTo(Mathf.Atan2(rv2.y, rv2.z));
     }
 
-
+    //move an invalid point of the triangle toward a valid point, stopping when it hits the cut off point
     Vector3 MoveTrianglePoint(int tri_index, int invalid_index, int valid_index, bool side)
     {
         int[] tris = mesh.triangles;
@@ -529,7 +529,7 @@ public class MeshSlicing : MonoBehaviour
 
 
 
-        //TRIGANOMETRY Method
+        //TRIGANOMETRY Method - works on paper, implementation doesn't. Maybe coords are local/world mixed?, maybe because Mathf.acos returns in radians instead of degrees?
 
         //relative_point.x = 0;
         //relative_point.z = 0;
@@ -540,19 +540,20 @@ public class MeshSlicing : MonoBehaviour
         //float arccosA = Mathf.Acos(((b * b) + (c * c) - (a * a)) / ((b * c) * 2));
         //Vector3 direction = local_invalid - relative_point;
         //arccosA = Vector3.Angle(local_valid, direction);
-        //float arccosB = 180 - 90 - arccosA;
-        //float arccosC = 90;
+        //float arccosB = 90;
+        //float arccosC = 180 - arccosC - arccosA;
 
 
-        //float hypL = a * Mathf.Sin(arccosB) / Mathf.Sin(arccosA);
-        //float opL = (a * Mathf.Sin(arccosA)) / Mathf.Sin(arccosB);
+
+        //float hypL = a * Mathf.Sin(arccosC) / Mathf.Sin(arccosA);
+        //float opposite_length = (a * Mathf.Sin(arccosA)) / Mathf.Sin(arccosC);
         //Debug.Log(opL);
         //Vector3 new_point = slice_transform.TransformPoint(relative_point);
 
-        //new_point.y = transform.TransformPoint(local_invalid).y - opL;
+        //new_point.y = transform.TransformPoint(local_invalid).y - opposite_length;
         //new_point.z = invalid.z;
 
-        //LINE INTERSECTION
+        //LINE INTERSECTION - works better but still inaccurate coordinates, something to do with world coords and local coords being incorrect
 
         //Vector3 LineA1 = local_invalid;
         //Vector3 LineA2 = local_valid;
@@ -563,6 +564,8 @@ public class MeshSlicing : MonoBehaviour
         //Vector3 new_point = (transform.TransformPoint(GetLineIntersectionPoint(LineA1, LineA2, LineB1, LineB2)));
         //return new_point;
 
+        //MOVETOWARDS METHOD - Slower, simpler but it works 
+
         int count = 0;
       
         if (side)
@@ -572,6 +575,8 @@ public class MeshSlicing : MonoBehaviour
                 invalid = Vector3.MoveTowards(invalid, valid, 0.01f);
                 count++;
                 relative_point = slice_transform.InverseTransformPoint(invalid);
+
+                //Only needed for exceptionally large meshes, where it would impact performance to use continue
                 if (count > 3000)
                 {
                     Debug.Log("BROKE OUT OF THE WHILE LOOP");
@@ -600,21 +605,21 @@ public class MeshSlicing : MonoBehaviour
     public Vector3 GetLineIntersectionPoint(Vector3 A1, Vector3 A2, Vector3 B1, Vector3 B2)
     {
 
-        float tmp = (B2.x - B1.x) * (A2.y - A1.y) - (B2.y - B1.y) * (A2.x - A1.x);
+        float intersection = (B2.x - B1.x) * (A2.y - A1.y) - (B2.y - B1.y) * (A2.x - A1.x);
 
-        if (tmp == 0)
+        //intersection is behind or lines are parallel
+        if (intersection <= 0)
         {
-            // No solution!
             return Vector3.zero;
         }
 
-        float mu = ((A1.x - B1.x) * (A2.y - A1.y) - (A1.y - B1.y) * (A2.x - A1.x)) / tmp;
+        float dist = ((A1.x - B1.x) * (A2.y - A1.y) - (A1.y - B1.y) * (A2.x - A1.x)) / intersection;
 
-
+        //return the point of intersection
         return new Vector3(
-            B1.x + (B2.x - B1.x) * mu,
-            B1.y + (B2.y - B1.y) * mu,
-            B1.z + (B2.z - B1.z) * mu
+            B1.x + (B2.x - B1.x) * dist,
+            B1.y + (B2.y - B1.y) * dist,
+            B1.z + (B2.z - B1.z) * dist
         );
     }
 }
